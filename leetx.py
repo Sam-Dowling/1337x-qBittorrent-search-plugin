@@ -39,7 +39,8 @@ from novaprinter import prettyPrinter
 
 
 LEETX_DOMAIN = "https://1337x.to"
-
+PAGINATION_PATTERN = re.compile('<li class="last"><a href="/search/(.*)/([0-9])/">Last</a></li>')  # noqa
+DOWNLOAD_PATTERN = re.compile('<a class\="(.*)" target\="_blank" href\="(.*)"><span class\="icon"><i class\="(.*)"></i></span>ITORRENTS MIRROR</a>')  # noqa
 
 class LeetxParser(HTMLParser):
     current_result = {}
@@ -48,6 +49,18 @@ class LeetxParser(HTMLParser):
     inside_row = False
 
     A, TBODY, TR, TD, SPAN = ('a', 'tbody', 'tr', 'td', 'span')
+
+    def _get_torrent_link(self, info):
+        # since 1337x does not provide torrent links in the search results,
+        # we will have to fetch the page and extract the torrent link
+        # and then call the download_file function on it.
+        torrent_page = retrieve_url(info)
+        torrent_link_match = DOWNLOAD_PATTERN.search(torrent_page)
+        if torrent_link_match and torrent_link_match.groups():
+            torrent_file = torrent_link_match.groups()[1].replace("http", "https")  # noqa
+            return(torrent_file)
+        else:
+            return(info)
 
     def handle_starttag(self, tag, attrs):
         # are we inside the results table body or not.
@@ -62,7 +75,7 @@ class LeetxParser(HTMLParser):
         # for torrent name and link
         link = attrs.get('href', '')
         if self.inside_tbody and tag == self.A and link.startswith('/torrent'):  # noqa
-            self.current_result['link'] = LEETX_DOMAIN + link
+            self.current_result['link'] = self._get_torrent_link(LEETX_DOMAIN + link)
             self.current_result['desc_link'] = LEETX_DOMAIN + link
             self.current_result['engine_url'] = LEETX_DOMAIN
             self.current_item = 'name'
@@ -108,10 +121,6 @@ class LeetxParser(HTMLParser):
             self.current_item = None
 
 
-PAGINATION_PATTERN = re.compile('<li class="last"><a href="/search/(.*)/([0-9])/">Last</a></li>')  # noqa
-DOWNLOAD_PATTERN = re.compile('<a class\="(.*) btn-(.*)" target\="_blank" href\="(.*)"><span class\="icon"><i class\="flaticon-torrent-download"></i></span>ITORRENTS MIRROR</a>')  # noqa
-
-
 class leetx(object):
     url = LEETX_DOMAIN
     name = "1337x"
@@ -124,18 +133,6 @@ class leetx(object):
         'anime': 'Anime',
         'software': 'Apps'
     }
-
-    def download_torrent(self, info):
-        # since 1337x does not provide torrent links in the search results,
-        # we will have to fetch the page and extract the torrent link
-        # and then call the download_file function on it.
-        torrent_page = retrieve_url(info)
-        torrent_link_match = DOWNLOAD_PATTERN.search(torrent_page)
-        if torrent_link_match and torrent_link_match.groups():
-            torrent_file = torrent_link_match.groups()[2].replace("http", "https")  # noqa
-            print(download_file(torrent_file))
-        else:
-            print('')
 
     def search(self, what, cat='all'):
         cat = cat.lower()
